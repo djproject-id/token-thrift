@@ -1,0 +1,72 @@
+# token-thrift safety defaults
+# Auto-disalin ke setiap project saat build/init pertama.
+
+# === Wallet & private keys ===
+*.key
+*.pem
+*.p12
+*.pfx
+*.gpg
+id_rsa*
+id_ed25519*
+id_ecdsa*
+
+# === Solana / Crypto ===
+keypair*.json
+*-keypair.json
+wallet*.json
+phantom*.json
+solflare*.json
+backpack*.json
+solana-keygen*
+.anchor/
+.solana/
+keypairs/
+wallets/
+
+# === Environment & secrets ===
+.env
+.env.*
+*.env.local
+*.env.production
+secrets.json
+secret*
+*.secret
+credentials.json
+credentials*
+auth.json
+.credentials/
+.aws/
+.ssh/
+config.local.json
+
+# === Mnemonic / seed ===
+*mnemonic*
+*seed.json
+*seed.txt
+*passphrase*
+*master.key
+*private*
+
+# === Heavy build artifacts (perf hygiene) ===
+node_modules/
+target/
+build/
+dist/
+out/
+.cache/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.git/
+.next/
+.parcel-cache/
+.turbo/
+
+# === Logs & databases ===
+*.log
+*.sqlite
+*.sqlite3
+*.db
+.code-review-graph/

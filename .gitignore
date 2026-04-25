@@ -1,0 +1,28 @@
+# Build artifacts
+*.log
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Secret-like (defense in depth)
+*.key
+*.pem
+.env
+.env.*
+secrets.json
+auth.json
+*-keypair.json
+wallet*.json
