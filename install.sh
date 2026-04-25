@@ -177,7 +177,7 @@ print_done() {
 
   $(c_green 'Cara pakai:')
     token-thrift build              # parse codebase di project Anda
-    token-thrift scan ~/SolanaSniper# cek file sensitif
+    token-thrift scan ~/myproject   # cek file sensitif
     token-thrift init ~/project     # tambah .code-review-graphignore
     token-thrift help               # daftar perintah
 

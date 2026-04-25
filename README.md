@@ -39,7 +39,7 @@ Restart Claude Code → tool aktif.
 
 ```bash
 token-thrift build              # parse codebase (cwd) + pre-flight scan
-token-thrift scan ~/SolanaSniper# cek file sensitif di project lain
+token-thrift scan ~/myproject   # cek file sensitif di project lain
 token-thrift init ~/project     # pasang .code-review-graphignore default
 token-thrift status             # cek status graph
 token-thrift help               # daftar perintah
