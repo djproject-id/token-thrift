@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# token-thrift — hardened wrapper around code-review-graph.
+# token-thrift: hardened CLI for sensitive codebases.
 # Auto-loaded by install.sh into ~/.local/bin/token-thrift.
 
 set -euo pipefail
@@ -27,24 +27,25 @@ DANGER_PATTERNS=(
 
 show_help() {
     cat <<HELP
-$(c_green 'token-thrift') — hemat token, codebase Anda aman.
+$(c_green 'token-thrift'): security-first code review for sensitive codebases.
 
 USAGE:
-    token-thrift build              Parse codebase (cwd), pre-flight scan
-    token-thrift update             Refresh graph, pre-flight scan
-    token-thrift scan [path]        Scan path untuk file sensitif
-    token-thrift init [path]        Pasang .code-review-graphignore default
-    token-thrift status             Status graph saat ini
-    token-thrift mcp-server         Jalankan MCP server (untuk Claude Code)
-    token-thrift help               Tampilkan pesan ini
-    token-thrift <other>            Forward ke code-review-graph
+    token-thrift build              Parse codebase (cwd) after pre-flight scan
+    token-thrift update             Refresh graph after pre-flight scan
+    token-thrift scan [path]        Scan a path for sensitive files
+    token-thrift init [path]        Install default .code-review-graphignore
+    token-thrift status             Show graph status
+    token-thrift mcp-server         Run MCP server (used by Claude Code)
+    token-thrift help               Show this message
+    token-thrift <other>            Pass through to underlying CLI
 
 $(c_red 'BLOCKED:')
-    install                         Auto-modifies sistem — pakai installer asli
-    apply-refactor                  Tulis ke source — pakai Claude Code edit
+    install                         Auto-modifies system files. Use the bundled installer.
+    apply-refactor                  Writes to source files. Use your editor instead.
+    cross-repo-search               Registry has minimal validation. Path traversal risk.
 
-$(c_yellow 'Cloud egress dimatikan:') env GOOGLE_API_KEY, MINIMAX_API_KEY,
-CRG_OPENAI_* di-unset otomatis. Tool dipaksa local-only.
+$(c_yellow 'Cloud egress disabled:') GOOGLE_API_KEY, MINIMAX_API_KEY, CRG_OPENAI_*
+are unset automatically. Local-only mode is enforced.
 HELP
 }
 
@@ -66,7 +67,7 @@ scan_dangerous() {
     done
 
     if [[ ${#found[@]} -gt 0 ]]; then
-        printf '%s File sensitif terdeteksi di %s:\n' "$(c_yellow '[!]')" "$target"
+        printf '%s Sensitive files detected in %s:\n' "$(c_yellow '[!]')" "$target"
         local seen=""
         for r in "${found[@]}"; do
             case " $seen " in
@@ -77,18 +78,18 @@ scan_dangerous() {
         done
         return 1
     fi
-    printf '%s Tidak ada file sensitif di %s\n' "$(c_green '[+]')" "$target"
+    printf '%s No sensitive files found in %s\n' "$(c_green '[+]')" "$target"
     return 0
 }
 
-err_path() { printf '%s Path tidak ditemukan: %s\n' "$(c_red '[x]')" "$1" >&2; }
+err_path() { printf '%s Path not found: %s\n' "$(c_red '[x]')" "$1" >&2; }
 
 ensure_local_ignore() {
     local repo="${1:-.}"
     local ignore="$repo/.code-review-graphignore"
     if [[ ! -f "$ignore" ]] && [[ -f "$GLOBAL_IGNORE" ]]; then
         cp "$GLOBAL_IGNORE" "$ignore"
-        printf '%s .code-review-graphignore dibuat dari template global\n' "$(c_green '[+]')"
+        printf '%s .code-review-graphignore created from global template\n' "$(c_green '[+]')"
     fi
 }
 
@@ -111,16 +112,16 @@ run_mcp_server() {
             || exec code-review-graph mcp 2>/dev/null \
             || true
     fi
-    printf '%s Tidak menemukan Python pipx untuk code-review-graph.\n' "$(c_red '[x]')" >&2
-    printf '    Coba: pipx reinstall code-review-graph\n' >&2
+    printf '%s pipx Python for code-review-graph not found.\n' "$(c_red '[x]')" >&2
+    printf '    Try: pipx reinstall code-review-graph\n' >&2
     exit 1
 }
 
 require_user_consent() {
-    printf '\n%s Lanjut tetap? Ketik "i-accept-the-risk": ' "$(c_yellow '[?]')"
+    printf '\n%s Continue anyway? Type "i-accept-the-risk": ' "$(c_yellow '[?]')"
     local ans
     read -r ans
-    [[ "$ans" == "i-accept-the-risk" ]] || { echo "Dibatalkan."; exit 1; }
+    [[ "$ans" == "i-accept-the-risk" ]] || { echo "Aborted."; exit 1; }
 }
 
 cmd="${1:-help}"
@@ -131,14 +132,14 @@ case "$cmd" in
         show_help
         ;;
     install|apply-refactor|apply_refactor)
-        printf '%s Subcommand "%s" diblokir oleh token-thrift.\n' "$(c_red '[BLOCKED]')" "$cmd" >&2
-        printf '    Alasan: modifikasi sistem/source code.\n' >&2
-        printf '    Pakai installer token-thrift, atau gunakan editor langsung.\n' >&2
+        printf '%s Subcommand "%s" is blocked by token-thrift.\n' "$(c_red '[BLOCKED]')" "$cmd" >&2
+        printf '    Reason: modifies system or source code.\n' >&2
+        printf '    Use the bundled installer or your editor instead.\n' >&2
         exit 1
         ;;
     cross-repo-search|cross_repo_search)
-        printf '%s Subcommand "%s" diblokir oleh token-thrift.\n' "$(c_red '[BLOCKED]')" "$cmd" >&2
-        printf '    Alasan: registry validation minimal — risk traversal.\n' >&2
+        printf '%s Subcommand "%s" is blocked by token-thrift.\n' "$(c_red '[BLOCKED]')" "$cmd" >&2
+        printf '    Reason: registry validation is minimal. Path traversal risk.\n' >&2
         exit 1
         ;;
     scan)
@@ -152,8 +153,8 @@ case "$cmd" in
     build|update)
         ensure_local_ignore "$(pwd)"
         if ! scan_dangerous "$(pwd)"; then
-            printf '\n  Tambahkan file di atas ke .code-review-graphignore.\n'
-            printf '  Atau jalankan: token-thrift init\n'
+            printf '\n  Add the files above to .code-review-graphignore.\n'
+            printf '  Or run: token-thrift init\n'
             require_user_consent
         fi
         exec code-review-graph "$cmd" "$@"

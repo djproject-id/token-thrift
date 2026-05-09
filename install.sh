@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # token-thrift installer
-# Hardened wrapper for code-review-graph: hemat token, codebase aman.
+# Security-hardened code review tool for sensitive codebases.
 
 set -euo pipefail
 
@@ -37,7 +37,7 @@ OS=$(detect_os)
 
 check_python() {
     if ! command -v python3 >/dev/null 2>&1; then
-        err "Python 3 tidak ditemukan."
+        err "Python 3 not found."
         case "$OS" in
             termux) echo "  Run: pkg install python" ;;
             macos)  echo "  Run: brew install python" ;;
@@ -49,7 +49,7 @@ check_python() {
     pyver=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
     IFS=. read -r major minor <<<"$pyver"
     if [[ $major -lt 3 ]] || { [[ $major -eq 3 ]] && [[ $minor -lt 10 ]]; }; then
-        err "Python 3.10+ dibutuhkan (ada $pyver)"
+        err "Python 3.10+ required (found $pyver)"
         exit 1
     fi
     ok "Python $pyver"
@@ -57,10 +57,10 @@ check_python() {
 
 ensure_pipx() {
     if command -v pipx >/dev/null 2>&1; then
-        ok "pipx siap"
+        ok "pipx ready"
         return
     fi
-    info "Memasang pipx..."
+    info "Installing pipx..."
     case "$OS" in
         termux) pkg install -y python-pip >/dev/null 2>&1 || true
                 python3 -m pip install --user pipx ;;
@@ -69,10 +69,10 @@ ensure_pipx() {
     esac
     export PATH="$HOME/.local/bin:$PATH"
     if ! command -v pipx >/dev/null 2>&1; then
-        err "pipx gagal terpasang"
+        err "pipx install failed"
         exit 1
     fi
-    ok "pipx terpasang"
+    ok "pipx installed"
 }
 
 verify_sha256() {
@@ -92,47 +92,47 @@ download_verify_install() {
     tmpdir=$(mktemp -d)
     trap "rm -rf '$tmpdir'" RETURN
 
-    info "Download $PKG_NAME==$PKG_VERSION (sebelum verifikasi SHA256)..."
+    info "Downloading $PKG_NAME==$PKG_VERSION (pre-verification)..."
     if ! python3 -m pip download --no-deps -d "$tmpdir" "${PKG_NAME}==${PKG_VERSION}" >/dev/null 2>&1; then
-        err "Download gagal — cek koneksi internet"
+        err "Download failed. Check your internet connection."
         return 1
     fi
     wheel=$(find "$tmpdir" -maxdepth 1 -name "code_review_graph-${PKG_VERSION}-*.whl" | head -1)
     if [[ -z "$wheel" ]]; then
-        err "Wheel tidak ditemukan dalam download"
+        err "Wheel not found in download"
         return 1
     fi
 
-    info "Verifikasi SHA256..."
+    info "Verifying SHA256..."
     if ! verify_sha256 "$wheel" "$WHEEL_SHA256"; then
-        err "SHA256 TIDAK COCOK — wheel mungkin sudah diubah/MITM. Aborted."
+        err "SHA256 mismatch. The wheel may have been altered or MITM intercepted. Aborted."
         return 1
     fi
-    ok "SHA256 cocok: $WHEEL_SHA256"
+    ok "SHA256 verified: $WHEEL_SHA256"
 
-    info "Pasang dari wheel terverifikasi (isolated venv)..."
+    info "Installing from verified wheel (isolated venv)..."
     pipx list 2>/dev/null | grep -q "$PKG_NAME" && pipx uninstall "$PKG_NAME" >/dev/null 2>&1 || true
     pipx install "$wheel" >/dev/null 2>&1 || pipx install "$wheel"
-    ok "Terpasang isolated"
+    ok "Installed in isolated venv"
 }
 
 install_wrapper() {
-    [[ -f "$WRAPPER_SRC" ]] || { err "$WRAPPER_SRC tidak ada"; return 1; }
+    [[ -f "$WRAPPER_SRC" ]] || { err "$WRAPPER_SRC missing"; return 1; }
     mkdir -p "$BIN_DIR"
     cp "$WRAPPER_SRC" "$WRAPPER"
     chmod +x "$WRAPPER"
-    ok "Wrapper terpasang: $WRAPPER"
+    ok "Wrapper installed: $WRAPPER"
 }
 
 install_global_ignore() {
-    [[ -f "$IGNORE_SRC" ]] || { err "$IGNORE_SRC tidak ada"; return 1; }
+    [[ -f "$IGNORE_SRC" ]] || { err "$IGNORE_SRC missing"; return 1; }
     mkdir -p "$THRIFT_HOME"
     cp "$IGNORE_SRC" "$GLOBAL_IGNORE"
     ok "Global ignore: $GLOBAL_IGNORE"
 }
 
 register_mcp() {
-    info "Daftarkan MCP server ke Claude Code..."
+    info "Registering MCP server with Claude Code..."
     python3 - "$WRAPPER" <<'PYEOF'
 import json, os, sys
 wrapper = sys.argv[1]
@@ -145,14 +145,14 @@ if os.path.exists(path):
 config.setdefault("mcpServers", {})
 config["mcpServers"]["token-thrift"] = {"command": wrapper, "args": ["mcp-server"]}
 with open(path, "w") as f: json.dump(config, f, indent=2)
-print(f"  Registered di: {path}")
+print(f"  Registered at: {path}")
 PYEOF
-    ok "MCP server: token-thrift"
+    ok "MCP server registered: token-thrift"
 }
 
 check_path() {
     if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-        warn "$BIN_DIR belum ada di PATH"
+        warn "$BIN_DIR is not on PATH"
         local rc
         case "$OS" in
             termux) rc="$HOME/.bashrc" ;;
@@ -161,9 +161,9 @@ check_path() {
         esac
         if [[ -f "$rc" ]] && ! grep -q "/.local/bin" "$rc" 2>/dev/null; then
             echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
-            ok "Ditambahkan ke $rc — restart shell atau: source $rc"
+            ok "Added to $rc. Restart your shell, or run: source $rc"
         else
-            echo "  Tambahkan: export PATH=\"\$HOME/.local/bin:\$PATH\""
+            echo "  Add to your shell rc: export PATH=\"\$HOME/.local/bin:\$PATH\""
         fi
     fi
 }
@@ -171,26 +171,26 @@ check_path() {
 print_done() {
     echo
     echo "$(c_green '════════════════════════════════════════')"
-    echo "$(c_green '  token-thrift terpasang')"
+    echo "$(c_green '  token-thrift installed')"
     echo "$(c_green '════════════════════════════════════════')"
     cat <<USAGE
 
-  $(c_green 'Cara pakai:')
-    token-thrift build              # parse codebase di project Anda
-    token-thrift scan ~/myproject   # cek file sensitif
-    token-thrift init ~/project     # tambah .code-review-graphignore
-    token-thrift help               # daftar perintah
+  $(c_green 'Usage:')
+    token-thrift build              # Parse the codebase in cwd, after a pre-flight scan.
+    token-thrift scan ~/myproject   # Scan a directory for sensitive files.
+    token-thrift init ~/myproject   # Drop the default ignore template into a project.
+    token-thrift help               # Full command list.
 
-  $(c_green 'MCP server:') sudah terdaftar di ~/.claude.json
-  Restart Claude Code agar tool aktif.
+  $(c_green 'MCP server:') registered in ~/.claude.json
+  Restart Claude Code to activate the tool.
 
-  $(c_yellow 'Tips:') jalankan 'token-thrift scan' di project Anda dulu sebelum 'build'.
+  $(c_yellow 'Tip:') run 'token-thrift scan' on your project before 'build'.
 
 USAGE
 }
 
 main() {
-    info "Memulai instalasi token-thrift..."
+    info "Starting token-thrift installation..."
     check_python
     ensure_pipx
     download_verify_install
