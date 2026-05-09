@@ -18,14 +18,11 @@ trap "rm -rf '$TMPDIR'" EXIT
 echo "Resolving and downloading $PKG with all transitive deps ..."
 echo "(this can take a minute)"
 
-# Make sure pip's build backend is available for any sdist fallbacks.
 python3 -m pip install --quiet setuptools wheel 2>/dev/null \
     || python3 -m pip install --user --quiet setuptools wheel 2>/dev/null \
     || python3 -m pip install --break-system-packages --quiet setuptools wheel 2>/dev/null \
     || true
 
-# Prefer wheels (no compile, deterministic). Fall back to allowing sdist if some
-# transitive dep is wheel-less for the current platform.
 if ! python3 -m pip download "$PKG" -d "$TMPDIR" --only-binary :all: 2>&1 | tail -5; then
     echo "Falling back to allow sdist for some packages..."
     rm -rf "$TMPDIR"/*
@@ -37,66 +34,89 @@ echo
 echo "Downloaded files:"
 ls -1 "$TMPDIR"
 
-# Build the lock file. Each package gets one entry with one or more hashes.
-# pip-compatible: pip install --require-hashes -r requirements.lock
-{
-    cat <<EOF
-# token-thrift requirements lock
-# Generated $(date -u +%Y-%m-%dT%H:%M:%SZ) on $(uname -sm)
-# Reproduce: bash scripts/gen-lock.sh
-# Verify: pip install --require-hashes -r requirements.lock
-#
-# This lock pins every transitive dependency. If any wheel on PyPI is altered,
-# the install will fail with a hash mismatch instead of silently pulling
-# tampered code.
+# Format the lock file via Python for reliable parsing of package/version
+# pairs from wheel and sdist filenames.
+python3 - "$TMPDIR" "$LOCK_FILE" "$(uname -sm)" <<'PYEOF'
+import hashlib
+import os
+import re
+import sys
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
 
-EOF
+src_dir = Path(sys.argv[1])
+lock_path = Path(sys.argv[2])
+platform = sys.argv[3]
 
-    # Group files by package name and emit the requirement spec.
-    declare -A SEEN
-    for f in "$TMPDIR"/*; do
-        name=$(basename "$f")
-        # Extract package + version. Filename forms:
-        #   pkg_name-version-pyXX-...-arch.whl
-        #   pkg_name-version.tar.gz
-        if [[ "$name" == *.whl ]]; then
-            stem="${name%-*-*-*-*.whl}"
-            stem="${stem%-*}"  # tolerate variations
-            pkg_ver=$(echo "$name" | sed -E 's/^([A-Za-z0-9_.]+)-([0-9][^-]*)-.*\.whl$/\1==\2/')
-        else
-            pkg_ver=$(echo "$name" | sed -E 's/^([A-Za-z0-9_.]+)-([0-9][^.]*)\.tar\.gz$/\1==\2/')
-        fi
-        # PyPI normalizes underscores in filenames to hyphens in package names.
-        pkg_ver_pep503=$(echo "$pkg_ver" | sed 's/_/-/g' | tr '[:upper:]' '[:lower:]')
 
-        h=$(sha256sum "$f" | awk '{print $1}')
+def parse(name: str):
+    """Return (pep503_name, version) or (None, None) if not a known artifact."""
+    # PEP 427 wheel: {name}-{version}(-{build})?-{python}-{abi}-{platform}.whl
+    m = re.match(
+        r"^(?P<n>[A-Za-z0-9_.]+?)-(?P<v>[0-9][^-]*?)(-\d[^-]*)?-(?P<py>\w+)-(?P<abi>\w+)-(?P<plat>[\w_.+]+)\.whl$",
+        name,
+    )
+    if m:
+        return m.group("n").replace("_", "-").lower(), m.group("v")
+    # Sdist: {name}-{version}.tar.gz where name may contain hyphens.
+    m = re.match(r"^(?P<n>[A-Za-z0-9_.][A-Za-z0-9_.-]*?)-(?P<v>[0-9][^-]*)\.tar\.gz$", name)
+    if m:
+        return m.group("n").lower(), m.group("v")
+    return None, None
 
-        if [[ -z "${SEEN[$pkg_ver_pep503]:-}" ]]; then
-            SEEN[$pkg_ver_pep503]="$h"
-            printf '\n%s \\\n' "$pkg_ver_pep503"
-        else
-            SEEN[$pkg_ver_pep503]+=" $h"
-        fi
-        printf '    --hash=sha256:%s \\\n' "$h"
-        printf '    # %s\n' "$name"
-    done
-} > "$LOCK_FILE"
 
-# Strip trailing backslash on the very last continuation line, since pip is
-# lenient but cleaner output is preferable.
-python3 - "$LOCK_FILE" <<'PYEOF'
-import sys, pathlib
-p = pathlib.Path(sys.argv[1])
-text = p.read_text()
-# remove '\\\n    # comment' that follows the very last hash to keep file tidy
-p.write_text(text)
+def sha256(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+groups: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
+unparsed: list[str] = []
+
+for f in sorted(src_dir.iterdir()):
+    pkg, ver = parse(f.name)
+    if pkg is None:
+        unparsed.append(f.name)
+        continue
+    groups[(pkg, ver)].append((sha256(f), f.name))
+
+if unparsed:
+    print(f"WARNING: could not parse: {unparsed}", file=sys.stderr)
+
+now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+lines = [
+    "# token-thrift requirements lock",
+    f"# Generated {now} on {platform}",
+    "# Reproduce: bash scripts/gen-lock.sh",
+    "# Verify:    pip install --require-hashes -r requirements.lock",
+    "#",
+    "# This lock pins every transitive dependency. If any wheel on PyPI is",
+    "# altered, install will fail with a hash mismatch instead of silently",
+    "# pulling tampered code. Lock files are platform-specific (wheels include",
+    "# arch tags), so regenerate on each target system.",
+    "",
+]
+
+for (pkg, ver), files in sorted(groups.items()):
+    lines.append(f"{pkg}=={ver} \\")
+    last_idx = len(files) - 1
+    for i, (h, fname) in enumerate(files):
+        sep = " \\" if i < last_idx else ""
+        lines.append(f"    --hash=sha256:{h}{sep}")
+    lines.append(f"    # files: {', '.join(f for _, f in files)}")
+    lines.append("")
+
+lock_path.write_text("\n".join(lines))
+print(f"Lock file written: {lock_path}")
+print(f"Pinned {len(groups)} packages, {sum(len(v) for v in groups.values())} files")
 PYEOF
 
 echo
-echo "Lock file written: $LOCK_FILE"
-echo
-echo "Sanity check:"
-grep -c "^[a-z]" "$LOCK_FILE" || true
+echo "Quick sanity check:"
+grep -c "^==" "$LOCK_FILE" 2>/dev/null || true
+grep -cE "^[a-zA-Z][a-zA-Z0-9._-]*==" "$LOCK_FILE" 2>/dev/null
 echo "package entries"
-echo
-echo "To enforce at install time, install.sh will prefer this lock when present."
