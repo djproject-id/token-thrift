@@ -53,8 +53,9 @@ platform = sys.argv[3]
 def parse(name: str):
     """Return (pep503_name, version) or (None, None) if not a known artifact."""
     # PEP 427 wheel: {name}-{version}(-{build})?-{python}-{abi}-{platform}.whl
+    # python and abi tags can contain dots (e.g., py2.py3, cp39.cp310).
     m = re.match(
-        r"^(?P<n>[A-Za-z0-9_.]+?)-(?P<v>[0-9][^-]*?)(-\d[^-]*)?-(?P<py>\w+)-(?P<abi>\w+)-(?P<plat>[\w_.+]+)\.whl$",
+        r"^(?P<n>[A-Za-z0-9_.]+?)-(?P<v>[0-9][^-]*?)(-\d[^-]*)?-(?P<py>[\w.]+)-(?P<abi>[\w.]+)-(?P<plat>[\w_.+]+)\.whl$",
         name,
     )
     if m:
