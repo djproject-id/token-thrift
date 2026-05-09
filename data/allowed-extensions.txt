@@ -1,0 +1,116 @@
+# token-thrift file-extension allowlist
+# Used by lib/allowlist.sh as a defense-in-depth: any file inside the project
+# whose extension is NOT on this list will trigger a warning before indexing.
+# One extension per line, leading dot, lowercase. Comments start with '#'.
+
+# Source code
+.py
+.pyi
+.pyx
+.ts
+.tsx
+.js
+.jsx
+.mjs
+.cjs
+.rs
+.go
+.java
+.kt
+.kts
+.scala
+.swift
+.c
+.cc
+.cpp
+.cxx
+.h
+.hpp
+.hxx
+.m
+.mm
+.cs
+.fs
+.ex
+.exs
+.rb
+.php
+.lua
+.r
+.jl
+.dart
+.zig
+.nim
+.elm
+.clj
+.cljs
+.hs
+.ml
+.gleam
+.v
+.vala
+.sol
+
+# Web / markup
+.html
+.htm
+.css
+.scss
+.sass
+.less
+.svg
+.vue
+.svelte
+.astro
+
+# Config / data (selective: text-only, low-risk)
+.yaml
+.yml
+.toml
+.ini
+.cfg
+.conf
+.json
+.json5
+.jsonc
+.xml
+.csv
+.tsv
+
+# Build / scripts
+.sh
+.bash
+.zsh
+.fish
+.ps1
+.bat
+.cmd
+.mk
+.cmake
+.gradle
+.bazel
+.bzl
+
+# Docs
+.md
+.mdx
+.rst
+.txt
+.tex
+.org
+.adoc
+
+# Schemas / IDLs
+.proto
+.graphql
+.gql
+.thrift
+.fbs
+.capnp
+
+# Notebook (parsed as JSON; metadata may include exec output but generally safe)
+.ipynb
+
+# Lock / pin files (read-only, safe to index)
+.lock
+.lockfile

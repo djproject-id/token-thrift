@@ -1,0 +1,43 @@
+# token-thrift network egress blocklist
+# Hostnames that the runtime guard refuses to connect to.
+# Suffix-match: an entry "openai.com" blocks api.openai.com, www.openai.com, etc.
+# One host per line. Comments start with '#'.
+
+# === Cloud LLM providers (any data sent here is leaked) ===
+openai.com
+anthropic.com
+generativelanguage.googleapis.com
+aiplatform.googleapis.com
+cognitiveservices.azure.com
+openai.azure.com
+api.minimax.io
+api.minimax.chat
+api.deepseek.com
+api.together.xyz
+api.fireworks.ai
+api.groq.com
+api.perplexity.ai
+api.mistral.ai
+api.cohere.ai
+api.cohere.com
+
+# === Embedding model registries ===
+huggingface.co
+hf.co
+
+# === Telemetry endpoints commonly used by AI tooling ===
+api.segment.io
+api.amplitude.com
+api.mixpanel.com
+api.heap.io
+api.posthog.com
+sentry.io
+ingest.sentry.io
+api.honeycomb.io
+
+# === Misc package indices that are NOT pip (defense in depth) ===
+pypi.org
+files.pythonhosted.org
+# NOTE: pypi access is REQUIRED at install time but blocked at runtime via this
+# guard. Install runs outside the guarded venv so it still works. Once the tool
+# is installed and running, no further PyPI traffic is needed.

@@ -10,12 +10,17 @@ WHEEL_SHA256="08d715607aefde3414d28b3a7844243823b150dc63ba4dd4529d6919f540d048"
 
 THRIFT_HOME="${HOME}/.token-thrift"
 GLOBAL_IGNORE="${THRIFT_HOME}/global-ignore"
+LIB_DEST="${THRIFT_HOME}/lib"
+DATA_DEST="${THRIFT_HOME}/data"
 BIN_DIR="${HOME}/.local/bin"
 WRAPPER="${BIN_DIR}/token-thrift"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WRAPPER_SRC="${SCRIPT_DIR}/token-thrift"
 IGNORE_SRC="${SCRIPT_DIR}/global-ignore"
+LIB_SRC="${SCRIPT_DIR}/lib"
+DATA_SRC="${SCRIPT_DIR}/data"
+LOCK_SRC="${SCRIPT_DIR}/requirements.lock"
 
 c_blue()   { printf '\033[1;34m%s\033[0m' "$*"; }
 c_green()  { printf '\033[1;32m%s\033[0m' "$*"; }
@@ -34,6 +39,11 @@ detect_os() {
 }
 
 OS=$(detect_os)
+
+# Source integrity helpers from the source tree (pre-install).
+if [[ -f "$LIB_SRC/integrity.sh" ]]; then
+    THRIFT_HOME="$THRIFT_HOME" source "$LIB_SRC/integrity.sh"
+fi
 
 check_python() {
     if ! command -v python3 >/dev/null 2>&1; then
@@ -75,7 +85,7 @@ ensure_pipx() {
     ok "pipx installed"
 }
 
-verify_sha256() {
+verify_sha256_local() {
     local file="$1" expected="$2" actual
     if command -v sha256sum >/dev/null 2>&1; then
         actual=$(sha256sum "$file" | awk '{print $1}')
@@ -103,25 +113,52 @@ download_verify_install() {
         return 1
     fi
 
-    info "Verifying SHA256..."
-    if ! verify_sha256 "$wheel" "$WHEEL_SHA256"; then
-        err "SHA256 mismatch. The wheel may have been altered or MITM intercepted. Aborted."
+    info "Verifying main wheel SHA256..."
+    if ! verify_sha256_local "$wheel" "$WHEEL_SHA256"; then
+        err "SHA256 mismatch on main wheel. Aborted."
         return 1
     fi
-    ok "SHA256 verified: $WHEEL_SHA256"
+    ok "Main wheel verified: $WHEEL_SHA256"
 
-    info "Installing from verified wheel (isolated venv)..."
+    info "Installing isolated venv via pipx..."
     pipx list 2>/dev/null | grep -q "$PKG_NAME" && pipx uninstall "$PKG_NAME" >/dev/null 2>&1 || true
-    pipx install "$wheel" >/dev/null 2>&1 || pipx install "$wheel"
-    ok "Installed in isolated venv"
+    if [[ -f "$LOCK_SRC" ]]; then
+        info "Lock file present, enforcing --require-hashes for transitive deps..."
+        if ! pipx install \
+                --pip-args "--require-hashes -r $LOCK_SRC" \
+                "$wheel" >/dev/null 2>&1; then
+            warn "Hash-pinned install failed (lock may be platform-specific). Falling back."
+            pipx install "$wheel" >/dev/null 2>&1 || pipx install "$wheel"
+        else
+            ok "All dependencies installed with verified hashes"
+        fi
+    else
+        warn "requirements.lock not found, only the main wheel was hash-verified."
+        info "  To pin transitive deps: bash scripts/gen-lock.sh"
+        pipx install "$wheel" >/dev/null 2>&1 || pipx install "$wheel"
+    fi
+    ok "Engine installed"
 }
 
 install_wrapper() {
     [[ -f "$WRAPPER_SRC" ]] || { err "$WRAPPER_SRC missing"; return 1; }
     mkdir -p "$BIN_DIR"
     cp "$WRAPPER_SRC" "$WRAPPER"
-    chmod +x "$WRAPPER"
+    chmod 700 "$WRAPPER"
     ok "Wrapper installed: $WRAPPER"
+}
+
+install_lib_data() {
+    mkdir -p "$LIB_DEST" "$DATA_DEST"
+    if [[ -d "$LIB_SRC" ]]; then
+        cp "$LIB_SRC"/*.sh "$LIB_DEST"/ 2>/dev/null || true
+        cp "$LIB_SRC"/*.py "$LIB_DEST"/ 2>/dev/null || true
+    fi
+    if [[ -d "$DATA_SRC" ]]; then
+        cp "$DATA_SRC"/*.txt "$DATA_DEST"/ 2>/dev/null || true
+    fi
+    ok "Helper libraries: $LIB_DEST"
+    ok "Data files: $DATA_DEST"
 }
 
 install_global_ignore() {
@@ -148,6 +185,33 @@ with open(path, "w") as f: json.dump(config, f, indent=2)
 print(f"  Registered at: {path}")
 PYEOF
     ok "MCP server registered: token-thrift"
+}
+
+harden_permissions() {
+    info "Applying restrictive permissions..."
+    chmod 700 "$THRIFT_HOME" 2>/dev/null || true
+    chmod 600 "$GLOBAL_IGNORE" 2>/dev/null || true
+    chmod 700 "$LIB_DEST" 2>/dev/null || true
+    chmod 700 "$DATA_DEST" 2>/dev/null || true
+    find "$LIB_DEST" -type f -exec chmod 600 {} \; 2>/dev/null || true
+    find "$DATA_DEST" -type f -exec chmod 600 {} \; 2>/dev/null || true
+    chmod 600 "${HOME}/.claude.json" 2>/dev/null || true
+    chmod 700 "$WRAPPER" 2>/dev/null || true
+    ok "Permissions hardened (700/600)"
+}
+
+snapshot_integrity() {
+    info "Taking integrity snapshots (wrapper, MCP config, pipx venv)..."
+    if declare -F store_wrapper_hash >/dev/null 2>&1; then
+        store_wrapper_hash "$WRAPPER"
+    fi
+    if declare -F store_mcp_hash >/dev/null 2>&1; then
+        store_mcp_hash "${HOME}/.claude.json"
+    fi
+    if declare -F snapshot_pipx_venv >/dev/null 2>&1; then
+        snapshot_pipx_venv "$PKG_NAME" || true
+    fi
+    ok "Integrity snapshots stored in $THRIFT_HOME"
 }
 
 check_path() {
@@ -178,7 +242,11 @@ print_done() {
   $(c_green 'Usage:')
     token-thrift build              # Parse the codebase in cwd, after a pre-flight scan.
     token-thrift scan ~/myproject   # Scan a directory for sensitive files.
-    token-thrift init ~/myproject   # Drop the default ignore template into a project.
+    token-thrift secret-scan        # Content-level secret scan.
+    token-thrift ext-scan           # File-extension allowlist scan.
+    token-thrift audit              # Show recent audit log.
+    token-thrift backup out.age     # Encrypted backup of state.
+    token-thrift self-update        # Update from GitHub.
     token-thrift help               # Full command list.
 
   $(c_green 'MCP server:') registered in ~/.claude.json
@@ -193,10 +261,13 @@ main() {
     info "Starting token-thrift installation..."
     check_python
     ensure_pipx
-    download_verify_install
+    install_lib_data
     install_global_ignore
+    download_verify_install
     install_wrapper
     register_mcp
+    harden_permissions
+    snapshot_integrity
     check_path
     print_done
 }
