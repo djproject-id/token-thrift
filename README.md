@@ -9,6 +9,9 @@ A hardened CLI that indexes your codebase into a local knowledge graph so AI ass
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20termux-blue?style=flat-square)](#)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](#)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/djproject-id/token-thrift/pulls)
+[![Good First Issues](https://img.shields.io/github/issues/djproject-id/token-thrift/good%20first%20issue?style=flat-square&label=good%20first%20issues&color=7057ff)](https://github.com/djproject-id/token-thrift/issues?q=is%3Aopen+label%3A%22good+first+issue%22)
+[![Stars](https://img.shields.io/github/stars/djproject-id/token-thrift?style=flat-square)](https://github.com/djproject-id/token-thrift/stargazers)
 
 </div>
 
@@ -234,3 +237,12 @@ rm -rf ~/.token-thrift
 ## License
 
 MIT © 2026 djproject-id
+
+## Contributing
+
+Contributions are welcome — improvements to scanner patterns, docs, and CI especially.
+Browse [good first issues](https://github.com/djproject-id/token-thrift/issues?q=is%3Aopen+label%3A%22good+first+issue%22)
+for small, well-scoped tasks, or open a
+[Discussion](https://github.com/djproject-id/token-thrift/discussions) to ask a question or share an idea.
+
+If token-thrift is useful to you, a star helps others find it.

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & ideas (Discussions)
+    url: https://github.com/djproject-id/token-thrift/discussions
+    about: Ask questions, share setups, and propose ideas here.
+  - name: Report a security vulnerability (private)
+    url: https://github.com/djproject-id/token-thrift/security/advisories/new
+    about: Please disclose security issues privately, never as a public issue.
